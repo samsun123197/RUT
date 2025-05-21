@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ST ve Gün Sorgulama</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+        }
+        .input-group {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .input-group label {
+            min-width: 80px;
+        }
+        .input-group input[type="text"],
+        .input-group select {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            background-color: white;
+            cursor: pointer;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #resultsTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        #resultsTable th, #resultsTable td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        #resultsTable th {
+            background-color: #f2f2f2;
+        }
+        .error-message {
+            color: red;
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ST ve Gün Sorgulama Ekranı</h1>
+
+        <div class="input-group">
+            <label for="stAdiInput">ST Adı:</label>
+            <select id="stAdiInput">
+                <option value="">-- Tümünü Seç --</option>
+                </select>
+        </div>
+        <div class="input-group">
+            <label for="gunInput">Gün:</label>
+            <select id="gunInput">
+                <option value="">-- TÜMÜNÜ SEÇ --</option>
+                <option value="PAZARTESİ">PAZARTESİ</option>
+                <option value="SALI">SALI</option>
+                <option value="ÇARŞAMBA">ÇARŞAMBA</option>
+                <option value="PERŞEMBE">PERŞEMBE</option>
+                <option value="CUMA">CUMA</option>
+                <option value="CUMARTESİ">CUMARTESİ</option>
+                <option value="PAZAR">PAZAR</option>
+            </select>
+        </div>
+        <button onclick="filterAndDisplayData()">Verileri Göster</button>
+
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+        <h2>Sonuçlar:</h2>
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    </tr>
+            </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        // YENİ GOOGLE SHEETS CSV URL'NİZ BURADA
+        const GOOGLE_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQYcJWXQLPzvYk9Dn5FHAbA5Ikpkua9WsVD6LVz5Zn4yO4JELbseqNs00CY-IQqHQ/pub?gid=923674025&single=true&output=csv';
+
+        let allData = [];
+
+        const gunSira = {
+            "PAZARTESİ": 1,
+            "SALI": 2,
+            "ÇARŞAMBA": 3,
+            "PERŞEMBE": 4,
+            "CUMA": 5,
+            "CUMARTESİ": 6,
+            "PAZAR": 7
+        };
+
+        async function fetchGoogleSheetData() {
+            try {
+                const response = await fetch(GOOGLE_SHEET_CSV_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const csvText = await response.text();
+                parseCSV(csvText);
+                populateStAdiDropdown();
+            } catch (error) {
+                console.error("Veri çekilirken hata oluştu:", error);
+                document.getElementById('errorMessage').textContent = 'Veriler yüklenirken bir hata oluştu. Lütfen URL\'yi kontrol edin veya internet bağlantınızı gözden geçirin.';
+                document.getElementById('errorMessage').style.display = 'block';
+            }
+        }
+
+        function parseCSV(csvText) {
+            const lines = csvText.split('\n').filter(line => line.trim() !== '');
+            if (lines.length === 0) {
+                document.getElementById('errorMessage').textContent = 'CSV dosyasında veri bulunamadı.';
+                document.getElementById('errorMessage').style.display = 'block';
+                return;
+            }
+
+            const rawHeaders = lines[0].split(',');
+            const headers = rawHeaders.map(header => header.trim());
+            console.log("Parsed Headers (CSV'den okunan başlıklar):", headers); // Hata ayıklama
+
+            allData = lines.slice(1).map(line => {
+                const values = line.split(',');
+                let row = {};
+                headers.forEach((header, index) => {
+                    row[header] = (values[index] || '').trim();
+                });
+                return row;
+            });
+            console.log("Yüklenen Tüm Veri (allData içeriği):", allData); // Hata ayıklama
+            updateTableHeaders(headers);
+        }
+
+        function populateStAdiDropdown() {
+            const stAdiSelect = document.getElementById('stAdiInput');
+            stAdiSelect.innerHTML = '<option value="">-- Tümünü Seç --</option>'; 
+
+            const stAdlari = new Set(); 
+            let stAdiValidCount = 0; // Hata ayıklama için
+
+            allData.forEach(row => {
+                const stAdiValue = row['ST ADI']; // 'ST ADI' anahtarının tam olarak eşleştiğinden emin olun
+                if (stAdiValue) {
+                    stAdlari.add(stAdiValue.toUpperCase());
+                    stAdiValidCount++;
+                }
+            });
+            console.log("ST ADI değerleri Set'e eklendi. Toplam geçerli ST ADI satırı:", stAdiValidCount);
+            console.log("Benzersiz ST ADI değerleri (dropdown'a eklenecekler):", Array.from(stAdlari));
+
+            Array.from(stAdlari).sort().forEach(stAdi => {
+                const option = document.createElement('option');
+                option.value = stAdi;
+                option.textContent = stAdi;
+                stAdiSelect.appendChild(option);
+            });
+            console.log("ST ADI Dropdown Dolduruldu. Eklenen benzersiz ST ADI sayısı:", stAdlari.size);
+        }
+
+        function updateTableHeaders(headers) {
+            const tableHead = document.querySelector('#resultsTable thead');
+            tableHead.innerHTML = '';
+            const headerRow = document.createElement('tr');
+            headers.forEach(headerText => {
+                const th = document.createElement('th');
+                th.textContent = headerText;
+                headerRow.appendChild(th);
+            });
+            tableHead.appendChild(headerRow);
+        }
+
+        function filterAndDisplayData() {
+            document.getElementById('errorMessage').style.display = 'none';
+            
+            const stAdiFilter = document.getElementById('stAdiInput').value.trim(); 
+            const gunFilter = document.getElementById('gunInput').value.trim(); 
+            
+            const tbody = document.querySelector('#resultsTable tbody');
+            tbody.innerHTML = '';
+
+            let filteredData = allData;
+
+            if (stAdiFilter !== '') {
+                filteredData = filteredData.filter(row => 
+                    row['ST ADI'] && row['ST ADI'].toUpperCase() === stAdiFilter
+                );
+            }
+
+            if (gunFilter !== '') {
+                filteredData = filteredData.filter(row => 
+                    row['GÜN'] && row['GÜN'].toUpperCase() === gunFilter
+                );
+            }
+
+            filteredData.sort((a, b) => {
+                const gunA = gunSira[a['GÜN'] ? a['GÜN'].toUpperCase() : ''] || 99;
+                const gunB = gunSira[b['GÜN'] ? b['GÜN'].toUpperCase() : ''] || 99;
+                return gunA - gunB;
+            });
+
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="' + (Object.keys(allData[0] || {}).length || 1) + '">Eşleşen veri bulunamadı.</td></tr>';
+                return;
+            }
+
+            filteredData.forEach(rowData => {
+                const rowElement = document.createElement('tr');
+                const headers = Object.keys(allData[0] || {});
+                headers.forEach(header => {
+                    const cell = document.createElement('td');
+                    cell.textContent = rowData[header] || '';
+                    rowElement.appendChild(cell);
+                });
+                tbody.appendChild(rowElement);
+            });
+        }
+
+        window.onload = fetchGoogleSheetData;
+    </script>
+</body>
+</html>
